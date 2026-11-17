@@ -59,7 +59,10 @@ const MAPS=[['ruines','Rues en ruine'],['usine','Zone industrielle'],['banlieue'
 const DIFFS=[['easy','Facile'],['normal','Normal'],['hard','Difficile'],['imp','Impossible']];
 const BOOSTS=[['heal',5],['shield',5],['barricade',5],['dmg',5],['rapid',5],['teddy',5],['freeze',5],['beartrap',5],['cash',5],['mine',5],['turret',5],['grenade',5],['strike',5],['smoke',5],['molotov',5],['drone',5],['decoy',5],['magnet',5],['fence',5],['dog',5],['adren',5],['ammo',5],['icewall',5],['heli',5],['revive',10]];
 const BNAMES={heal:'Soin',shield:'Bouclier',barricade:'Barricade',dmg:'Dégâts',rapid:'Cadence',teddy:'Ours explosif',freeze:'Gel',beartrap:'Piège à loups',cash:'Argent',mine:'Mines',turret:'Tourelle',grenade:'Grenade',strike:'Frappe aérienne',smoke:'Fumigène',molotov:'Molotov',drone:'Drone',decoy:'Appât',magnet:'Aimant',fence:'Clôture',dog:'Chien',adren:'Adrénaline',ammo:'Munitions',icewall:'Mur de glace',heli:'Hélicoptère',revive:'Réanimation'};
-const OUTFITS=[['noel','Père Noël'],['lutin','Lutin'],['renne','Renne'],['neige','Bonhomme de neige'],['noisette','Casse-noisette'],['epice',"Pain d'épice"],['krampus','Krampus'],['candy',"Canne d'orge"],['fouettard','Père Fouettard'],['sapin','Sapin de Noël']];
+// [id|null, nom, nom féminin|'', payante]  — l'ordre = index de save.look.outfit dans le jeu
+const OUTFITS=[[null,'Soldat','',0],[null,'Commando','',0],[null,'Survivant','',0],[null,'SWAT','',0],[null,'Chasseur','',0],[null,'Scientifique','',0],[null,'Motard','',0],
+['noel','Père Noël','Mère Noël',1],['lutin','Lutin','Lutine',1],['renne','Renne','',1],['neige','Bonhomme de neige','',1],['noisette','Casse-noisette','',1],['epice',"Pain d'épice",'',1],['krampus','Krampus','',1],['candy',"Canne d'orge",'',1],['fouettard','Père Fouettard','Mère Fouettarde',1],['sapin','Sapin de Noël','',1],
+['z_normal','Zombie','',0],['z_fast','Coureur','',0],['z_tank','Colosse','',0],['z_digger','Fouisseur','',0],['z_brute','Boss : le Colosse','',0],['z_spitter','Boss : le Cracheur','',0],['z_summoner',"Boss : l'Invocateur",'',0],['z_mage','Le Magicien sanglant','',0],['z_santa','Zombie Noël','',0],['z_elf','Zombie Lutin','',0],['z_fouet','Zombie Fouettard','',0],['z_dog','Chien zombie','',0],['z_deer','Cerf zombie','',0],['z_peng','Pingouin zombie','',0]];
 const SKINS=['orig','gold','red','blue','green','purple','orange','pink','cyan','white'];
 const WOODS=['orig','dark','light'];
 // Plafonds appliqués par le jeu à l'import (C02 Anti-Cheat)
@@ -79,11 +82,11 @@ function normalize(o){
   for(const k of Object.keys(d.own)) if(!WEAPONS.some(w=>w[1]===k)) delete d.own[k];   // armes inconnues = refusées par le jeu
   d.up=d.up&&typeof d.up==='object'?d.up:{};
   for(const k of Object.keys(d.up)){const l=d.up[k]&&d.up[k].lvl;if(!WEAPONS.some(w=>w[1]===k)){delete d.up[k];continue}d.up[k].lvl=num(l,0,CAP.up)}
-  d.skinsOwned=d.skinsOwned||{};d.mapClear=d.mapClear||{};d.mapWaves=d.mapWaves||{};d.boost=d.boost||{};d.look=Object.assign(fresh().look,d.look||{});d.sel=Object.assign({map:'ruines',diff:'normal'},d.sel||{});d.daily=Object.assign({last:0,buys:0,pend:null},d.daily||{});
+  d.skinsOwned=d.skinsOwned||{};d.mapClear=d.mapClear||{};d.mapWaves=d.mapWaves||{};d.boost=d.boost||{};d.look=Object.assign(fresh().look,d.look||{});d.look.outfit=num(d.look.outfit,0,OUTFITS.length-1);d.sel=Object.assign({map:'ruines',diff:'normal'},d.sel||{});d.daily=Object.assign({last:0,buys:0,pend:null},d.daily||{});
   return clampAll(d);
 }
 function clampAll(d){
-  d.bank=num(d.bank,0,CAP.bank);d.xp=num(d.xp,0,CAP.xp);d.hpLvl=num(d.hpLvl,0,CAP.hp);d.dmgLvl=num(d.dmgLvl,0,CAP.hp);d.best=num(d.best,0,CAP.best);
+  d.bank=num(d.bank,0,CAP.bank);d.xp=num(d.xp,0,CAP.xp);d.hpLvl=num(d.hpLvl,0,CAP.hp);d.dmgLvl=0;d.best=num(d.best,0,CAP.best);
   for(const [id,max] of BOOSTS) if(d.boost[id]!==undefined) d.boost[id]=num(d.boost[id],0,max);
   for(const k of Object.keys(d.boost)) if(!BOOSTS.some(b=>b[0]===k)) delete d.boost[k];
   for(const m of Object.keys(d.mapWaves)) for(const df of Object.keys(d.mapWaves[m])) d.mapWaves[m][df]=num(d.mapWaves[m][df],0,CAP.waves);
@@ -153,6 +156,10 @@ function bon(p){
   }
 }
 function maps(p){
+  const rs=el('<div class="row"><label>Carte sélectionnée</label><select id="sm"></select><select id="sd"></select></div>');
+  MAPS.forEach(m=>rs.querySelector('#sm').add(new Option(m[1],m[0])));DIFFS.forEach(d=>rs.querySelector('#sd').add(new Option(d[1],d[0])));
+  rs.querySelector('#sm').value=S.sel.map;rs.querySelector('#sd').value=S.sel.diff;
+  rs.querySelector('#sm').onchange=e=>S.sel.map=e.target.value;rs.querySelector('#sd').onchange=e=>S.sel.diff=e.target.value;p.appendChild(rs);
   p.appendChild(el('<p class="mut">Cartes terminées et meilleure manche atteinte par difficulté.</p>'));
   for(const [id,name] of MAPS){
     p.appendChild(el(`<h2>${name}</h2>`));
@@ -168,12 +175,29 @@ function maps(p){
   }
 }
 function outs(p){
-  p.appendChild(el('<p class="mut">Tenues du pack de fêtes (payantes en jeu).</p>'));
+  p.appendChild(el('<h2>Tenue équipée</h2>'));
+  const L=S.look;
+  const r=el('<div class="row"><label>Tenue</label><select></select></div>');const sel=r.querySelector('select');
+  OUTFITS.forEach((o,i)=>sel.add(new Option(o[1]+(o[2]?' / '+o[2]:'')+(o[3]?' (pack fêtes)':''),i)));
+  sel.value=L.outfit|0;
+  sel.onchange=()=>{L.outfit=+sel.value;const o=OUTFITS[L.outfit];if(o[3]) S.skinsOwned[o[0]]=true;render()};p.appendChild(r);
+  const r2=el('<div class="row"><label>Sexe / silhouette</label><select id="sx"><option value="m">Homme</option><option value="f">Femme</option></select><select id="bd"><option value="0">Normale</option><option value="1">Exagérée</option></select></div>');
+  r2.querySelector('#sx').value=L.sex==='f'?'f':'m';r2.querySelector('#sx').onchange=e=>L.sex=e.target.value;
+  r2.querySelector('#bd').value=L.build===1?'1':'0';r2.querySelector('#bd').onchange=e=>L.build=+e.target.value;p.appendChild(r2);
+  p.appendChild(el('<p class="mut">Couleurs personnalisées (désactivées = couleurs de la tenue).</p>'));
   const g=el('<div class="grid"></div>');p.appendChild(g);
-  for(const [id,name] of OUTFITS){
-    const it=el(`<label class="item"><input type="checkbox" ${S.skinsOwned[id]?'checked':''}><span class="n">${name}</span></label>`);
-    it.querySelector('input').onchange=e=>{if(e.target.checked) S.skinsOwned[id]=true;else delete S.skinsOwned[id]};g.appendChild(it);
-  }
+  [['skin','Peau'],['hair','Cheveux'],['top','Haut'],['pants','Pantalon'],['hat','Couvre-chef'],['shoes','Chaussures']].forEach(([k,n])=>{
+    const it=el(`<label class="item"><input type="checkbox" ${L[k]?'checked':''}><span class="n">${n}</span><input type="color" value="${L[k]||'#888888'}"></label>`);
+    const [cb,col]=it.querySelectorAll('input');
+    cb.onchange=()=>{L[k]=cb.checked?col.value:null};col.oninput=()=>{L[k]=col.value;cb.checked=true};g.appendChild(it);
+  });
+  p.appendChild(el('<h2>Tenues du pack de fêtes possédées</h2>'));
+  const g2=el('<div class="grid"></div>');p.appendChild(g2);
+  OUTFITS.filter(o=>o[3]).forEach(o=>{
+    const it=el(`<label class="item"><input type="checkbox" ${S.skinsOwned[o[0]]?'checked':''}><span class="n">${o[1]}</span></label>`);
+    it.querySelector('input').onchange=e=>{if(e.target.checked) S.skinsOwned[o[0]]=true;else{delete S.skinsOwned[o[0]];if(OUTFITS[L.outfit][0]===o[0]) L.outfit=0}};g2.appendChild(it);
+  });
+  p.appendChild(el('<p class="mut">Les skins zombies sont gratuits dans le jeu : aucune possession à gérer.</p>'));
 }
 function raw(p){
   const t=el('<textarea spellcheck="false"></textarea>');t.value=JSON.stringify(S,null,1);p.appendChild(t);
