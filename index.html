@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Éditeur de sauvegarde - The Infected Grounds</title>
+<style>
+:root{--bg:#14110f;--panel:#201a17;--edge:#4a3a2e;--tx:#e9e1d0;--mut:#8a8178;--acc:#e2542e;--ok:#9fd18a;--gold:#e0a526}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.45 system-ui,sans-serif}
+header{padding:14px 16px;border-bottom:2px solid var(--edge);display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+h1{font-size:19px;margin:0;letter-spacing:.04em;color:var(--acc)}
+main{max-width:1000px;margin:0 auto;padding:16px}
+.bar{display:flex;flex-wrap:wrap;gap:8px;margin-left:auto}
+button,select,input,textarea{font:inherit;color:var(--tx);background:#2d2723;border:1px solid var(--edge);border-radius:4px;padding:6px 10px}
+button{cursor:pointer}button:hover{border-color:var(--acc)}
+button.pri{background:#4a2018;border-color:var(--acc)}
+input[type=number]{width:140px}input[type=checkbox]{width:18px;height:18px;padding:0}
+nav{display:flex;flex-wrap:wrap;gap:4px;margin:12px 0}
+nav button.on{background:#4a2018;border-color:var(--acc)}
+.panel{background:var(--panel);border:1px solid var(--edge);border-radius:6px;padding:14px;margin-bottom:14px}
+.row{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:8px 0}
+.row label{min-width:190px;color:var(--mut)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:6px}
+.item{display:flex;align-items:center;gap:8px;background:#2a2320;border:1px solid var(--edge);border-radius:4px;padding:5px 8px}
+.item span.n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.item select,.item input[type=number]{width:auto;padding:3px 4px}
+.item input[type=number]{width:62px}
+.mut{color:var(--mut);font-size:13px}
+.warn{background:#3a1c14;border:1px solid var(--acc);border-radius:6px;padding:10px 12px;margin-bottom:14px}
+textarea{width:100%;height:420px;font:13px/1.4 ui-monospace,monospace}
+h2{font-size:16px;margin:16px 0 6px;color:var(--gold)}
+#msg{min-height:1.4em;color:var(--ok)}#msg.err{color:#ff7a5a}
+.hide{display:none}
+</style>
+</head>
+<body>
+<header>
+  <h1>THE INFECTED GROUNDS · ÉDITEUR DE SAUVEGARDE</h1>
+  <div class="bar">
+    <button id="bNew">Nouvelle sauvegarde</button>
+    <button id="bFile">Ouvrir un fichier…</button>
+    <button id="bPaste">Coller du JSON</button>
+    <button id="bExp" class="pri">Exporter</button>
+  </div>
+</header>
+<main>
+  <div class="warn"><b>Anti-triche C02.</b> Le jeu signe ses exports avec une clé liée à l'appareil. Cet éditeur ne peut pas produire cette signature : un fichier modifié sera accepté à l'import uniquement s'il n'apporte <i>rien de plus</i> que le coffre du jeu (valeurs égales ou réduites), ou s'il provient d'une ancienne version. Les plafonds du jeu sont appliqués ici pour éviter les refus « valeurs impossibles ».</div>
+  <div id="msg"></div>
+  <input type="file" id="file" accept=".json,application/json" class="hide">
+  <nav id="tabs"></nav>
+  <div id="view"></div>
+</main>
+<script>
+"use strict";
+// ---- Données extraites du jeu (v0.66) ----
+const WEAPONS=[["MÊLÉE","Couteau"],["MÊLÉE","Poignard"],["MÊLÉE","Machette"],["MÊLÉE","Hache de bûcheron"],["MÊLÉE","Batte cloutée"],["MÊLÉE","Katana"],["MÊLÉE","Marteau de guerre"],["MÊLÉE","Faux"],["MÊLÉE","Tronçonneuse"],["PISTOLETS","Glock 17"],["PISTOLETS","Beretta 92"],["PISTOLETS","M1911"],["PISTOLETS","USP"],["PISTOLETS","CZ 75"],["PISTOLETS","Five-seveN"],["PISTOLETS","Sig P226"],["PISTOLETS","Makarov"],["PISTOLETS","Tokarev TT-33"],["PISTOLETS","Glock 18"],["PISTOLETS","Revolver Python"],["PISTOLETS","Magnum 44"],["PISTOLETS","Desert Eagle"],["PM","Uzi"],["PM","MAC-10"],["PM","MP5"],["PM","MP7"],["PM","P90"],["PM","Vector"],["PM","Skorpion"],["PM","Thompson M1928"],["PM","PPSh-41"],["PM","UMP45"],["PM","Bizon"],["PM","MP40"],["PM","AKS-74U"],["ASSAUT","AK-47"],["ASSAUT","AKM"],["ASSAUT","AK-74"],["ASSAUT","AK-12"],["ASSAUT","AN-94"],["ASSAUT","M4A1"],["ASSAUT","M16A4"],["ASSAUT","HK416"],["ASSAUT","SCAR-H"],["ASSAUT","FAMAS"],["ASSAUT","Galil"],["ASSAUT","Steyr AUG"],["ASSAUT","G36"],["ASSAUT","SIG 552"],["ASSAUT","FN FAL"],["ASSAUT","H&K G3"],["ASSAUT","Tavor"],["ASSAUT","QBZ-95"],["POMPES","Remington 870"],["POMPES","Mossberg 500"],["POMPES","Benelli M4"],["POMPES","SPAS-12"],["POMPES","KSG"],["POMPES","Winchester 1887"],["POMPES","AA-12"],["POMPES","Saiga-12"],["POMPES","Double canon"],["POMPES","Vepr-12"],["PRÉCISION","Dragunov SVD"],["PRÉCISION","M14 EBR"],["PRÉCISION","SKS"],["PRÉCISION","Mosin-Nagant"],["PRÉCISION","Kar98k"],["PRÉCISION","Lee-Enfield"],["PRÉCISION","Winchester 94"],["PRÉCISION","Remington 700"],["PRÉCISION","Steyr Scout"],["PRÉCISION","M24 SWS"],["PRÉCISION","AWP"],["PRÉCISION","CheyTac M200"],["PRÉCISION","Barrett M82"],["PRÉCISION","PGM Hécate II"],["LOURDES","M249"],["LOURDES","PKM"],["LOURDES","RPK"],["LOURDES","MG42"],["LOURDES","M60"],["LOURDES","Browning M2"],["LOURDES","Negev"],["LOURDES","MG4"],["LOURDES","Stoner 63"],["LOURDES","BAR M1918"],["LOURDES","Minigun"],["SPÉCIAL","Arbalète"],["SPÉCIAL","Arc de chasse"],["SPÉCIAL","Pistolet à clous"],["SPÉCIAL","Lance-flammes"],["SPÉCIAL","Lance-grenades M79"],["SPÉCIAL","RPG-7"],["SPÉCIAL","Bazooka"],["SPÉCIAL","Railgun"],["SPÉCIAL","Fusil laser"],["SPÉCIAL","Fusil à plasma"],["SPÉCIAL","Fusil harpon"],["SPÉCIAL","Pistolet laser"],["PISTOLETS","Browning Hi-Power"],["PISTOLETS","Walther P38"],["PISTOLETS","Walther PPK"],["PISTOLETS","Luger P08"],["PISTOLETS","Glock 19"],["PISTOLETS","HK Mark 23"],["PISTOLETS","Beretta 93R"],["PISTOLETS","Colt Single Action Army"],["PISTOLETS","Ruger Redhawk"],["PISTOLETS","Colt Anaconda"],["PISTOLETS","Webley Mk VI"],["PISTOLETS","S&W Model 500"],["PM","Mini-Uzi"],["PM","Micro Uzi"],["PM","MP5K"],["PM","Sterling L2A3"],["PM","Beretta M12"],["PM","CZ Scorpion EVO"],["PM","M3 Grease Gun"],["PM","Sten"],["PM","PP-19 Vityaz"],["PM","Carl Gustaf m/45"],["PM","B&T MP9"],["ASSAUT","M16A1"],["ASSAUT","M4 CQB"],["ASSAUT","AK-103"],["ASSAUT","AK-105"],["ASSAUT","RK 62"],["ASSAUT","Type 56"],["ASSAUT","SCAR-L"],["ASSAUT","Bushmaster ACR"],["ASSAUT","XM8"],["ASSAUT","L85A2"],["ASSAUT","CZ 805 Bren"],["ASSAUT","Beretta ARX-160"],["ASSAUT","Daewoo K2"],["POMPES","Ithaca 37"],["POMPES","Mossberg 590"],["POMPES","Remington 1100"],["POMPES","Beretta 1301"],["POMPES","Fabarm STF12"],["POMPES","Franchi SPAS-15"],["POMPES","Browning BPS"],["POMPES","Winchester 1897"],["POMPES","Stoeger Coach Gun"],["POMPES","Mare's Leg"],["POMPES","Canon scié"],["POMPES","Ithaca Stakeout"],["PRÉCISION","Springfield M1903"],["PRÉCISION","M1 Garand"],["PRÉCISION","SVT-40"],["PRÉCISION","HK PSG1"],["PRÉCISION","Sako TRG-42"],["PRÉCISION","Tikka T3"],["PRÉCISION","Arctic Warfare"],["PRÉCISION","Dragunov SVU"],["PRÉCISION","Barrett M99"],["LOURDES","Ultimax 100"],["LOURDES","Type 80"],["LOURDES","FN Minimi Para"],["LOURDES","MG3"],["LOURDES","Browning M1919"],["LOURDES","Lewis Gun"],["SPÉCIAL","M72 LAW"],["SPÉCIAL","Panzerfaust"],["SPÉCIAL","Milkor MGL"],["SPÉCIAL","Pistolet lance-fusée"],["SPÉCIAL","Arbalète à répétition"],["SPÉCIAL","Fusil à fléchettes"],["AKIMBO","Double Glock 17"],["AKIMBO","Double Beretta 92"],["AKIMBO","Double M1911"],["AKIMBO","Double USP"],["AKIMBO","Double CZ 75"],["AKIMBO","Double Five-seveN"],["AKIMBO","Double Sig P226"],["AKIMBO","Double Glock 18"],["AKIMBO","Double Desert Eagle"],["AKIMBO","Double Revolver Python"],["AKIMBO","Double Colt Single Action Army"],["AKIMBO","Double Uzi"],["AKIMBO","Double MAC-10"],["AKIMBO","Double MP7"],["AKIMBO","Double Skorpion"],["AKIMBO","Double Mini-Uzi"],["AKIMBO","Double Vector"],["AKIMBO","Double MP5K"],["AKIMBO","Uzi + Canon scié"],["AKIMBO","MAC-10 + Canon scié"],["AKIMBO","Mini-Uzi + Mare's Leg"],["AKIMBO","Uzi + Mare's Leg"],["AKIMBO","Beretta 92 + Canon scié"],["AKIMBO","Glock 17 + Canon scié"],["AKIMBO","Desert Eagle + Uzi"],["AKIMBO","M1911 + Mare's Leg"],["AKIMBO","Python + Mare's Leg"],["AKIMBO","Glock 18 + Ithaca Stakeout"],["AKIMBO","MP5K + Ithaca Stakeout"],["AKIMBO","Desert Eagle + Canon scié"],["AKIMBO","Double Canon scié"],["AKIMBO","Double Mare's Leg"]];            // [catégorie, nom]
+const MAPS=[['ruines','Rues en ruine'],['usine','Zone industrielle'],['banlieue','Banlieue de nuit'],['desert','Base dans le désert'],['metro','Métro abandonné'],['foret','Forêt brumeuse']];
+const DIFFS=[['easy','Facile'],['normal','Normal'],['hard','Difficile'],['imp','Impossible']];
+const BOOSTS=[['heal',5],['shield',5],['barricade',5],['dmg',5],['rapid',5],['teddy',5],['freeze',5],['beartrap',5],['cash',5],['mine',5],['turret',5],['grenade',5],['strike',5],['smoke',5],['molotov',5],['drone',5],['decoy',5],['magnet',5],['fence',5],['dog',5],['adren',5],['ammo',5],['icewall',5],['heli',5],['revive',10]];
+const BNAMES={heal:'Soin',shield:'Bouclier',barricade:'Barricade',dmg:'Dégâts',rapid:'Cadence',teddy:'Ours explosif',freeze:'Gel',beartrap:'Piège à loups',cash:'Argent',mine:'Mines',turret:'Tourelle',grenade:'Grenade',strike:'Frappe aérienne',smoke:'Fumigène',molotov:'Molotov',drone:'Drone',decoy:'Appât',magnet:'Aimant',fence:'Clôture',dog:'Chien',adren:'Adrénaline',ammo:'Munitions',icewall:'Mur de glace',heli:'Hélicoptère',revive:'Réanimation'};
+const OUTFITS=[['noel','Père Noël'],['lutin','Lutin'],['renne','Renne'],['neige','Bonhomme de neige'],['noisette','Casse-noisette'],['epice',"Pain d'épice"],['krampus','Krampus'],['candy',"Canne d'orge"],['fouettard','Père Fouettard'],['sapin','Sapin de Noël']];
+const SKINS=['orig','gold','red','blue','green','purple','orange','pink','cyan','white'];
+const WOODS=['orig','dark','light'];
+// Plafonds appliqués par le jeu à l'import (C02 Anti-Cheat)
+const CAP={bank:2e8,xp:2e9,hp:15,best:1000,waves:1000,up:4};
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const num=(v,a,b)=>clamp(Math.floor(+v)||0,a,b);
+
+let S=null, tab='Général', ver='';
+const $=s=>document.querySelector(s);
+const say=(t,err)=>{const m=$('#msg');m.textContent=t;m.className=err?'err':''};
+
+function fresh(){return{bank:0,xp:0,own:{'Couteau':true,'Glock 17':true},melee:'Couteau',up:{},hpLvl:0,dmgLvl:0,best:0,skinsOwned:{},mapClear:{},sel:{map:'ruines',diff:'normal'},mapWaves:{},boost:{heal:0,shield:0},daily:{last:0,buys:0,pend:null},look:{outfit:0,sex:'m',build:0,skin:null,hair:null,top:null,pants:null,hat:null,shoes:null}}}
+
+function normalize(o){
+  const d=Object.assign(fresh(),o);
+  d.own=Object.assign({},d.own);d.own['Couteau']=true;d.own['Glock 17']=true;
+  for(const k of Object.keys(d.own)) if(!WEAPONS.some(w=>w[1]===k)) delete d.own[k];   // armes inconnues = refusées par le jeu
+  d.up=d.up&&typeof d.up==='object'?d.up:{};
+  for(const k of Object.keys(d.up)){const l=d.up[k]&&d.up[k].lvl;if(!WEAPONS.some(w=>w[1]===k)){delete d.up[k];continue}d.up[k].lvl=num(l,0,CAP.up)}
+  d.skinsOwned=d.skinsOwned||{};d.mapClear=d.mapClear||{};d.mapWaves=d.mapWaves||{};d.boost=d.boost||{};d.look=Object.assign(fresh().look,d.look||{});d.sel=Object.assign({map:'ruines',diff:'normal'},d.sel||{});d.daily=Object.assign({last:0,buys:0,pend:null},d.daily||{});
+  return clampAll(d);
+}
+function clampAll(d){
+  d.bank=num(d.bank,0,CAP.bank);d.xp=num(d.xp,0,CAP.xp);d.hpLvl=num(d.hpLvl,0,CAP.hp);d.dmgLvl=num(d.dmgLvl,0,CAP.hp);d.best=num(d.best,0,CAP.best);
+  for(const [id,max] of BOOSTS) if(d.boost[id]!==undefined) d.boost[id]=num(d.boost[id],0,max);
+  for(const k of Object.keys(d.boost)) if(!BOOSTS.some(b=>b[0]===k)) delete d.boost[k];
+  for(const m of Object.keys(d.mapWaves)) for(const df of Object.keys(d.mapWaves[m])) d.mapWaves[m][df]=num(d.mapWaves[m][df],0,CAP.waves);
+  if(d.daily.last>Date.now()) d.daily.last=0;
+  return d;
+}
+function parse(text){
+  let o=JSON.parse(text);
+  if(o&&o.data) o=o.data;
+  if(!o||typeof o!=='object'||typeof o.own!=='object'||isNaN(+o.bank)) throw new Error('Format de sauvegarde invalide');
+  ver=String(o.ver||'');
+  delete o.ac;      // signature interne du jeu : périmée après modification
+  return normalize(o);
+}
+function load(text){try{S=parse(text);say('Sauvegarde chargée'+(ver?' (v'+ver+')':''));render()}catch(e){say('Fichier invalide : '+e.message,true)}}
+
+// ---- Rendu ----
+const TABS=['Général','Armes','Bonus','Cartes','Tenues','JSON brut'];
+function el(h){const t=document.createElement('template');t.innerHTML=h.trim();return t.content.firstChild}
+function numInput(label,get,set,min,max,hint){
+  const r=el(`<div class="row"><label>${label}</label><input type="number" min="${min}" max="${max}"><span class="mut">${hint||('0 à '+max.toLocaleString('fr-FR'))}</span></div>`);
+  const i=r.querySelector('input');i.value=get();i.onchange=()=>{set(num(i.value,min,max));i.value=get()};return r;
+}
+function render(){
+  const nav=$('#tabs');nav.innerHTML='';
+  TABS.forEach(t=>{const b=el(`<button class="${t===tab?'on':''}">${t}</button>`);b.onclick=()=>{tab=t;render()};nav.appendChild(b)});
+  const v=$('#view');v.innerHTML='';
+  if(!S){v.appendChild(el('<div class="panel">Chargez un fichier d\'export du jeu, collez du JSON, ou créez une nouvelle sauvegarde.</div>'));return}
+  const p=el('<div class="panel"></div>');v.appendChild(p);
+  ({'Général':gen,'Armes':arms,'Bonus':bon,'Cartes':maps,'Tenues':outs,'JSON brut':raw})[tab](p);
+}
+function gen(p){
+  p.appendChild(numInput('Argent ($)',()=>S.bank,v=>S.bank=v,0,CAP.bank));
+  p.appendChild(numInput('Expérience (XP)',()=>S.xp,v=>S.xp=v,0,CAP.xp));
+  p.appendChild(numInput('Niveau de vie max',()=>S.hpLvl,v=>S.hpLvl=v,0,CAP.hp,'0 à 15 (+20 PV par niveau)'));
+  p.appendChild(numInput('Record de manches',()=>S.best,v=>S.best=v,0,CAP.best));
+  const r=el('<div class="row"><label>Arme de mêlée équipée</label><select></select></div>');const s=r.querySelector('select');
+  WEAPONS.filter(w=>w[0]==='MÊLÉE').forEach(w=>s.add(new Option(w[1],w[1])));s.value=S.melee||'Couteau';s.onchange=()=>{S.melee=s.value;S.own[s.value]=true};p.appendChild(r);
+  const r2=el('<div class="row"><label>Version de la sauvegarde</label><span class="mut"></span></div>');r2.querySelector('span').textContent=ver||'(inconnue)';p.appendChild(r2);
+}
+function arms(p){
+  const bar=el('<div class="row"><button id="all">Tout débloquer</button><button id="max">Tout niveau 4</button><button id="none">Armes de départ seulement</button></div>');p.appendChild(bar);
+  bar.querySelector('#all').onclick=()=>{WEAPONS.forEach(w=>S.own[w[1]]=true);render()};
+  bar.querySelector('#max').onclick=()=>{WEAPONS.forEach(w=>{S.own[w[1]]=true;(S.up[w[1]]=S.up[w[1]]||{}).lvl=4});render()};
+  bar.querySelector('#none').onclick=()=>{S.own={'Couteau':true,'Glock 17':true};S.up={};render()};
+  let cat='';let g;
+  for(const [c,n] of WEAPONS){
+    if(c!==cat){cat=c;p.appendChild(el(`<h2>${c}</h2>`));g=el('<div class="grid"></div>');p.appendChild(g)}
+    const locked=n==='Couteau'||n==='Glock 17';
+    const it=el(`<div class="item"><input type="checkbox" ${S.own[n]?'checked':''} ${locked?'disabled':''}><span class="n"></span><select></select></div>`);
+    it.querySelector('.n').textContent=n;
+    const sel=it.querySelector('select');for(let l=0;l<=4;l++) sel.add(new Option('Niv. '+l,l));
+    sel.value=(S.up[n]&&S.up[n].lvl)|0;
+    it.querySelector('input').onchange=e=>{if(e.target.checked) S.own[n]=true;else delete S.own[n]};
+    sel.onchange=()=>{const l=+sel.value;if(l>0){(S.up[n]=S.up[n]||{}).lvl=l;S.own[n]=true;it.querySelector('input').checked=true}else delete S.up[n]};
+    g.appendChild(it);
+  }
+}
+function bon(p){
+  const g=el('<div class="grid"></div>');p.appendChild(g);
+  p.insertBefore(el('<p class="mut">Vide = bonus non acheté. 0 = acheté, niveau 0.</p>'),g);
+  for(const [id,max] of BOOSTS){
+    const it=el(`<div class="item"><span class="n">${BNAMES[id]}</span><select></select></div>`);const s=it.querySelector('select');
+    s.add(new Option('—','-'));for(let l=0;l<=max;l++) s.add(new Option('Niv. '+l,l));
+    s.value=S.boost[id]===undefined?'-':S.boost[id];
+    s.onchange=()=>{if(s.value==='-') delete S.boost[id];else S.boost[id]=+s.value};g.appendChild(it);
+  }
+}
+function maps(p){
+  p.appendChild(el('<p class="mut">Cartes terminées et meilleure manche atteinte par difficulté.</p>'));
+  for(const [id,name] of MAPS){
+    p.appendChild(el(`<h2>${name}</h2>`));
+    const row=el('<div class="row"></div>');
+    const c=el(`<label style="min-width:auto"><input type="checkbox" ${S.mapClear[id]?'checked':''}> Terminée</label>`);
+    c.querySelector('input').onchange=e=>{if(e.target.checked) S.mapClear[id]=true;else delete S.mapClear[id]};row.appendChild(c);
+    for(const [d,dn] of DIFFS){
+      const w=el(`<span class="item">${dn}<input type="number" min="0" max="${CAP.waves}"></span>`);const i=w.querySelector('input');
+      i.value=(S.mapWaves[id]||{})[d]||0;
+      i.onchange=()=>{const v=num(i.value,0,CAP.waves);i.value=v;(S.mapWaves[id]=S.mapWaves[id]||{})[d]=v};row.appendChild(w);
+    }
+    p.appendChild(row);
+  }
+}
+function outs(p){
+  p.appendChild(el('<p class="mut">Tenues du pack de fêtes (payantes en jeu).</p>'));
+  const g=el('<div class="grid"></div>');p.appendChild(g);
+  for(const [id,name] of OUTFITS){
+    const it=el(`<label class="item"><input type="checkbox" ${S.skinsOwned[id]?'checked':''}><span class="n">${name}</span></label>`);
+    it.querySelector('input').onchange=e=>{if(e.target.checked) S.skinsOwned[id]=true;else delete S.skinsOwned[id]};g.appendChild(it);
+  }
+}
+function raw(p){
+  const t=el('<textarea spellcheck="false"></textarea>');t.value=JSON.stringify(S,null,1);p.appendChild(t);
+  const b=el('<div class="row"><button class="pri">Appliquer le JSON</button></div>');p.appendChild(b);
+  b.querySelector('button').onclick=()=>{try{S=parse(t.value);say('JSON appliqué (valeurs ramenées aux plafonds)');render()}catch(e){say('JSON invalide : '+e.message,true)}};
+}
+
+// ---- Entrées / sorties ----
+$('#bNew').onclick=()=>{S=normalize(fresh());ver='';say('Nouvelle sauvegarde');render()};
+$('#bFile').onclick=()=>$('#file').click();
+$('#file').onchange=e=>{const f=e.target.files[0];if(!f) return;const r=new FileReader();r.onload=()=>load(r.result);r.readAsText(f);e.target.value=''};
+$('#bPaste').onclick=()=>{const t=prompt('Collez le JSON de la sauvegarde :');if(t) load(t)};
+$('#bExp').onclick=()=>{
+  if(!S){say('Rien à exporter',true);return}
+  S=clampAll(S);
+  const out={game:'the-infected-grounds',v:5,date:new Date().toISOString(),data:S};
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(out,null,1)],{type:'application/json'}));
+  a.download='infected-grounds-sauvegarde-modifiee.json';document.body.appendChild(a);a.click();
+  setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1500);say('Fichier exporté (non signé : voir l\'avertissement ci-dessus)');
+};
+addEventListener('dragover',e=>e.preventDefault());
+addEventListener('drop',e=>{e.preventDefault();const f=e.dataTransfer.files[0];if(!f) return;const r=new FileReader();r.onload=()=>load(r.result);r.readAsText(f)});
+render();
+</script>
+</body>
+</html>
