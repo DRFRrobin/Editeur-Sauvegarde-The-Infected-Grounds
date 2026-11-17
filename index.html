@@ -40,6 +40,8 @@ h2{font-size:16px;margin:16px 0 6px;color:var(--gold)}
   <span id="gv" class="mut"></span>
   <div class="bar">
     <button id="bNew">Nouvelle sauvegarde</button>
+    <button id="bRef" class="pri">Charger la référence (mode sûr)</button>
+    <button id="bRefOff" class="hide">Retirer la référence</button>
     <button id="bFile">Ouvrir un fichier…</button>
     <button id="bPaste">Coller du JSON</button>
     <button id="bExp" class="pri">Exporter</button>
@@ -47,8 +49,10 @@ h2{font-size:16px;margin:16px 0 6px;color:var(--gold)}
 </header>
 <main>
   <div class="warn"><b>Anti-triche C02.</b> Le jeu signe ses exports avec une clé liée à l'appareil. Cet éditeur ne peut pas produire cette signature : un fichier modifié sera accepté à l'import uniquement s'il n'apporte <i>rien de plus</i> que le coffre du jeu (valeurs égales ou réduites), ou s'il provient d'une ancienne version. Les plafonds du jeu sont appliqués ici pour éviter les refus « valeurs impossibles ».</div>
+  <div id="refbar" class="warn hide"></div>
   <div id="msg"></div>
   <input type="file" id="file" accept=".json,application/json" class="hide">
+  <input type="file" id="fileRef" accept=".json,application/json" class="hide">
   <nav id="tabs"></nav>
   <div id="view"></div>
 </main>
@@ -89,12 +93,37 @@ function normalize(o){
   return clampAll(d);
 }
 function clampAll(d){
+  d=clampBase(d);return enforce(d);
+}
+function clampBase(d){
   d.bank=num(d.bank,0,CAP.bank);d.xp=num(d.xp,0,CAP.xp);d.hpLvl=num(d.hpLvl,0,CAP.hp);d.dmgLvl=0;d.best=num(d.best,0,CAP.best);
   for(const [id,max] of BOOSTS) if(d.boost[id]!==undefined) d.boost[id]=num(d.boost[id],0,max);
   for(const k of Object.keys(d.boost)) if(!BOOSTS.some(b=>b[0]===k)) delete d.boost[k];
   for(const m of Object.keys(d.mapWaves)) for(const df of Object.keys(d.mapWaves[m])) d.mapWaves[m][df]=num(d.mapWaves[m][df],0,CAP.waves);
   if(d.daily.last>Date.now()) d.daily.last=0;
   return d;
+}
+// ---- Mode sûr : rien ne peut dépasser la référence (export récent du jeu), donc l'import est accepté ----
+let REF=null;
+const cloneJ=o=>JSON.parse(JSON.stringify(o));
+function enforce(d){
+  if(!REF) return d;
+  const R=REF;
+  d.bank=Math.min(d.bank,R.bank);d.xp=Math.min(d.xp,R.xp);d.hpLvl=Math.min(d.hpLvl,R.hpLvl);d.dmgLvl=0;d.best=Math.min(d.best,R.best);
+  for(const k of Object.keys(d.own)) if(!R.own[k]) delete d.own[k];
+  d.own['Couteau']=true;d.own['Glock 17']=true;
+  for(const k of Object.keys(d.up)){const l=Math.min((d.up[k]&&d.up[k].lvl)|0,(R.up[k]&&R.up[k].lvl)|0);if(l<=0) delete d.up[k];else d.up[k].lvl=l}
+  if(!d.own[d.melee]) d.melee='Couteau';
+  for(const k of Object.keys(d.boost)){if(R.boost[k]===undefined) delete d.boost[k];else d.boost[k]=Math.min(d.boost[k]|0,R.boost[k]|0)}
+  for(const k of Object.keys(d.skinsOwned)) if(!R.skinsOwned[k]) delete d.skinsOwned[k];
+  for(const k of Object.keys(d.mapClear)) if(!R.mapClear[k]) delete d.mapClear[k];
+  for(const m of Object.keys(d.mapWaves)) for(const df of Object.keys(d.mapWaves[m])) d.mapWaves[m][df]=Math.min(d.mapWaves[m][df]|0,((R.mapWaves[m]||{})[df])|0);
+  const o=OUTFITS[d.look.outfit|0];if(o&&o[3]&&!d.skinsOwned[o[0]]) d.look.outfit=0;
+  return d;
+}
+function refBar(){
+  const b=$('#refbar');b.classList.toggle('hide',!REF);$('#bRefOff').classList.toggle('hide',!REF);$('#bRef').classList.toggle('hide',!!REF);
+  if(REF) b.innerHTML='<b>Mode sûr actif.</b> Rien ne peut dépasser la référence chargée (argent '+REF.bank.toLocaleString('fr-FR')+' $, XP '+REF.xp.toLocaleString('fr-FR')+', '+Object.keys(REF.own).length+' armes…). Les valeurs plus hautes sont ramenées automatiquement. Utilisez un export <i>récent</i> fait par le jeu sur cet appareil : il doit correspondre à votre sauvegarde actuelle.';
 }
 function parse(text){
   let o=JSON.parse(text);
@@ -114,6 +143,7 @@ function numInput(label,get,set,min,max,hint){
   const i=r.querySelector('input');i.value=get();i.onchange=()=>{set(num(i.value,min,max));i.value=get()};return r;
 }
 function render(){
+  refBar();
   const nav=$('#tabs');nav.innerHTML='';
   TABS.forEach(t=>{const b=el(`<button class="${t===tab?'on':''}">${t}</button>`);b.onclick=()=>{tab=t;render()};nav.appendChild(b)});
   const v=$('#view');v.innerHTML='';
@@ -219,10 +249,16 @@ $('#bExp').onclick=()=>{
   const out={game:'the-infected-grounds',v:5,date:new Date().toISOString(),data:S};
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(out,null,1)],{type:'application/json'}));
   a.download='infected-grounds-sauvegarde-modifiee.json';document.body.appendChild(a);a.click();
-  setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1500);say('Fichier exporté (non signé : voir l\'avertissement ci-dessus)');
+  setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1500);say(REF?'Fichier exporté : ne dépasse pas la référence, il sera accepté par le jeu':'Fichier exporté (non signé : voir l\'avertissement ci-dessus)');
 };
 addEventListener('dragover',e=>e.preventDefault());
 addEventListener('drop',e=>{e.preventDefault();const f=e.dataTransfer.files[0];if(!f) return;const r=new FileReader();r.onload=()=>load(r.result);r.readAsText(f)});
+$('#view').addEventListener('change',e=>{if(!REF||!S||e.target.tagName==='TEXTAREA') return;enforce(S);render()});
+$('#bRef').onclick=()=>$('#fileRef').click();
+$('#fileRef').onchange=e=>{const f=e.target.files[0];if(!f) return;const r=new FileReader();
+  r.onload=()=>{try{const d=parse(r.result);REF=cloneJ(d);S=cloneJ(d);say('Référence chargée'+(ver?' (v'+ver+')':'')+' : mode sûr actif'+(ver&&ver!==GAME_VERSION?' - attention : l\'éditeur est prévu pour la v'+GAME_VERSION:''),!!ver&&ver!==GAME_VERSION);render()}catch(x){say('Référence invalide : '+x.message,true)}};
+  r.readAsText(f);e.target.value=''};
+$('#bRefOff').onclick=()=>{REF=null;say('Mode sûr désactivé : les exports peuvent être refusés par le jeu');render()};
 render();
 </script>
 </body>
